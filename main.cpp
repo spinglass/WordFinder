@@ -9,23 +9,17 @@
 
 struct Word
 {
-	int rep = 0;
 	std::array<char, 5> letters;
-};
-
-struct Entry
-{
 	int rep = 0;
-	std::vector<Word> words;
 };
 
 struct Solution
 {
-	Entry e0;
-	Entry e1;
-	Entry e2;
-	Entry e3;
-	Entry e4;
+	int r0;
+	int r1;
+	int r2;
+	int r3;
+	int r4;
 };
 
 struct Timer
@@ -64,32 +58,6 @@ void Log(const char* format, ...)
 
 	printf(buffer);
 	fprintf(g_Log, buffer);
-}
-
-
-void Print(Entry& en)
-{
-	Log("{");
-	for (auto& w : en.words)
-	{
-		Log(" %.*s", (int)w.letters.size(), &w.letters.front());
-	}
-	Log(" }");
-}
-
-void Print(Solution& s)
-{
-	Log("SOLUTION: ");
-	Print(s.e0);
-	Log(" ");
-	Print(s.e1);
-	Log(" ");
-	Print(s.e2);
-	Log(" ");
-	Print(s.e3);
-	Log(" ");
-	Print(s.e4);
-	Log("\n");
 }
 
 bool IsLetter(char c)
@@ -178,10 +146,11 @@ void RemoveDoubleLetters(std::vector<Word>& words)
 	Log("RemoveDoubleLetters: %zu (%lldus)\n", words.size(), timer.Microseconds());
 }
 
-void GenerateRepresentations(std::vector<Word>& words)
+std::vector<int> GenerateRepresentations(std::vector<Word>& words)
 {
 	Timer timer;
 
+	std::vector<int> reps;
 	for (auto& word : words)
 	{
 		int rep = 0;
@@ -190,40 +159,14 @@ void GenerateRepresentations(std::vector<Word>& words)
 			rep += 1 << (l - 'a');
 		}
 		word.rep = rep;
-	}
-
-	Log("GenerateRepresentations: (%lldus)\n", timer.Microseconds());
-}
-
-std::vector<Entry> FindAnagrams(std::vector<Word> in)
-{
-	Timer timer;
-	std::vector<Entry> out;
-	 
-	for (auto word : in)
-	{
-		bool found = false;
-		for (auto& en : out)
+		if (reps.end() == std::find(reps.begin(), reps.end(), rep))
 		{
-			if (word.rep == en.rep)
-			{
-				found = true;
-				en.words.push_back(word);
-				break;
-			}
-		}
-		
-		if (!found)
-		{
-			Entry en;
-			en.rep = word.rep;
-			en.words = { word };
-			out.push_back(en);
+			reps.push_back(rep);
 		}
 	}
 
-	Log("FindAnagrams: %zu (%lldms)\n", out.size(), timer.Milliseconds());
-	return out;
+	Log("GenerateRepresentations: %zu (%lldms)\n", reps.size(), timer.Milliseconds());
+	return reps;
 }
 
 bool IsCommonLetter(int a, int b)
@@ -231,34 +174,35 @@ bool IsCommonLetter(int a, int b)
 	return (a & b) != 0;
 }
 
-std::vector<Solution> FindSolutions(std::vector<Entry>& in)
+std::vector<Solution> FindSolutions(std::vector<int>& reps)
 {
 	struct Set
 	{
-		Entry* e0;
-		Entry* e1;
-		Entry* e2;
-		Entry* e3;
-		Entry* e4;
-		std::vector<Entry*> options;
+		int r0;
+		int r1;
+		int r2;
+		int r3;
+		int r4;
+		std::vector<int> options;
 	};
 
 	// Find all pairs of words that don't have any common letters
 	std::vector<Set> pairs;
 	{
+		Timer timer;
 		int count = 0;
-		for (int i0 = 0; i0 < in.size(); ++i0)
+		for (int i0 = 0; i0 < reps.size(); ++i0)
 		{
-			auto e0 = &in[i0];
-			Set set = { e0 };
+			int r0 = reps[i0];
+			Set set = { r0 };
 
-			for (int i1 = i0 + 1; i1 < in.size(); ++i1)
+			for (int i1 = i0 + 1; i1 < reps.size(); ++i1)
 			{
-				auto e1 = &in[i1];
+				int r1 = reps[i1];
 
-				if (!IsCommonLetter(e0->rep, e1->rep))
+				if (!IsCommonLetter(r0, r1))
 				{
-					set.options.push_back(e1);
+					set.options.push_back(r1);
 					++count;
 				}
 			}
@@ -268,35 +212,31 @@ std::vector<Solution> FindSolutions(std::vector<Entry>& in)
 				pairs.push_back(set);
 			}
 		}
-		Log("FindSolutions: %d pairs, %zu sets\n", count, pairs.size());
+		Log("FindSolutions: %d pairs, %zu sets (%lldms)\n", count, pairs.size(), timer.Milliseconds());
 	}
 
 	// Pairs to triples
 	std::vector<Set> triples;
 	{
+		Timer timer;
 		int count = 0;
 		for (int i0 = 0; i0 < pairs.size(); ++i0)
 		{
-			if (i0 > 0 && i0 % 1000 == 0)
-			{
-				printf("%d / %zu : %d\n", i0, pairs.size(), count);
-			}
-
 			auto& pair = pairs[i0];
 			auto& options = pair.options;
 
 			for (int i1 = 0; i1 < options.size(); ++i1)
 			{
-				auto* e1 = options[i1];
-				Set set = { pair.e0, e1 };
+				int r1 = options[i1];
+				Set set = { pair.r0, r1 };
 
 				for (int i2 = i1 + 1; i2 < options.size(); ++i2)
 				{
-					auto* e2 = options[i2];
+					int r2 = options[i2];
 
-					if (!IsCommonLetter(e1->rep, e2->rep))
+					if (!IsCommonLetter(r1, r2))
 					{
-						set.options.push_back(e2);
+						set.options.push_back(r2);
 						++count;
 					}
 				}
@@ -307,12 +247,13 @@ std::vector<Solution> FindSolutions(std::vector<Entry>& in)
 				}
 			}
 		}
-		Log("FindSolutions: %d triples, %zu sets\n", count, triples.size());
+		Log("FindSolutions: %d triples, %zu sets (%lldms)\n", count, triples.size(), timer.Milliseconds());
 	}
 
 	// Triples to quads
 	std::vector<Set> quads;
 	{
+		Timer timer;
 		int count = 0;
 		for (int i0 = 0; i0 < triples.size(); ++i0)
 		{
@@ -321,16 +262,16 @@ std::vector<Solution> FindSolutions(std::vector<Entry>& in)
 
 			for (int i1 = 0; i1 < options.size(); ++i1)
 			{
-				auto* e2 = options[i1];
-				Set set = { triple.e0, triple.e1, e2 };
+				int r2 = options[i1];
+				Set set = { triple.r0, triple.r1, r2 };
 
 				for (int i2 = i1 + 1; i2 < options.size(); ++i2)
 				{
-					auto* e3 = options[i2];
+					int r3 = options[i2];
 
-					if (!IsCommonLetter(e2->rep, e3->rep))
+					if (!IsCommonLetter(r2, r3))
 					{
-						set.options.push_back(e3);
+						set.options.push_back(r3);
 						++count;
 					}
 				}
@@ -341,12 +282,13 @@ std::vector<Solution> FindSolutions(std::vector<Entry>& in)
 				}
 			}
 		}
-		Log("FindSolutions: %d quads, %zu sets\n", count, quads.size());
+		Log("FindSolutions: %d quads, %zu sets (%lldms)\n", count, quads.size(), timer.Milliseconds());
 	}
 
 	// Quads to solutions
 	std::vector<Solution> out;
 	{
+		Timer timer;
 		for (int i0 = 0; i0 < quads.size(); ++i0)
 		{
 			auto& quad = quads[i0];
@@ -354,31 +296,60 @@ std::vector<Solution> FindSolutions(std::vector<Entry>& in)
 
 			for (int i1 = 0; i1 < options.size(); ++i1)
 			{
-				auto* e3 = options[i1];
-				Set set = { quad.e0, quad.e1, quad.e2, e3 };
+				int r3 = options[i1];
+				Set set = { quad.r0, quad.r1, quad.r2, r3 };
 
 				for (int i2 = i1 + 1; i2 < options.size(); ++i2)
 				{
-					auto* e4 = options[i2];
+					int r4 = options[i2];
 
-					if (!IsCommonLetter(e3->rep, e4->rep))
+					if (!IsCommonLetter(r3, r4))
 					{
-						Solution s = { *quad.e0, *quad.e1, *quad.e2, *e3, *e4 };
-						Print(s);
+						Solution s = { quad.r0, quad.r1, quad.r2, r3, r4 };
 						out.push_back(s);
 					}
 				}
-
-				if (set.options.size() > 2)
-				{
-					quads.push_back(set);
-				}
 			}
 		}
-		Log("FindSolutions: %d solutions\n", out.size());
+		Log("FindSolutions: %d solutions (%lldms)\n", out.size(), timer.Milliseconds());
 	}
 
 	return out;
+}
+
+void PrintWords(std::vector<Word> const& words, int rep)
+{
+	Log("{");
+	for (auto word : words)
+	{
+		if (word.rep == rep)
+		{
+			Log(" %.*s", (int)word.letters.size(), &word.letters.front());
+		}
+	}
+	Log(" }");
+}
+
+void PrintSolutions(std::vector<Solution> const& solutions, std::vector<Word> const& words)
+{
+	Timer timer;
+
+	for (auto const& s : solutions)
+	{
+		Log("SOLUTION: ");
+		PrintWords(words, s.r0);
+		Log(" ");
+		PrintWords(words, s.r1);
+		Log(" ");
+		PrintWords(words, s.r2);
+		Log(" ");
+		PrintWords(words, s.r3);
+		Log(" ");
+		PrintWords(words, s.r4);
+		Log("\n");
+	}
+
+	Log("PrintSolutions: (%lldms)\n", timer.Milliseconds());
 }
 
 int main()
@@ -397,15 +368,13 @@ int main()
 
 	// Filter words with repeated letters
 	RemoveDoubleLetters(words);
-	GenerateRepresentations(words);
-
-	// Filter (and store) anagrams
-	auto entries = FindAnagrams(words);
+	auto reps = GenerateRepresentations(words);
 
 	// Run the search
-	auto solutions = FindSolutions(entries);
+	auto solutions = FindSolutions(reps);
+	PrintSolutions(solutions, words);
 
 	// Record how long the process took
-	Log("Took: %llds\n", timer.Seconds());
+	Log("Total time: %lldms\n", timer.Milliseconds());
 	fclose(g_Log);
 }
