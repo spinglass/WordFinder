@@ -7,11 +7,15 @@
 #include <cstdarg>
 #include <vector>
 
-using Word = std::array<char, 5>;
+struct Word
+{
+	int rep = 0;
+	std::array<char, 5> letters;
+};
 
 struct Entry
 {
-	Word base;
+	int rep = 0;
 	std::vector<Word> words;
 };
 
@@ -22,6 +26,29 @@ struct Solution
 	Entry e2;
 	Entry e3;
 	Entry e4;
+};
+
+struct Timer
+{
+	auto Seconds()
+	{
+		auto delta = std::chrono::high_resolution_clock::now() - start;
+		return std::chrono::duration_cast<std::chrono::seconds>(delta).count();
+	}
+
+	auto Milliseconds()
+	{
+		auto delta = std::chrono::high_resolution_clock::now() - start;
+		return std::chrono::duration_cast<std::chrono::milliseconds>(delta).count();
+	}
+
+	auto Microseconds()
+	{
+		auto delta = std::chrono::high_resolution_clock::now() - start;
+		return std::chrono::duration_cast<std::chrono::microseconds>(delta).count();
+	}
+
+	std::chrono::steady_clock::time_point start = std::chrono::high_resolution_clock::now();
 };
 
 static FILE* g_Log = nullptr;
@@ -45,7 +72,7 @@ void Print(Entry& en)
 	Log("{");
 	for (auto& w : en.words)
 	{
-		Log(" %.*s", (int)w.size(), &w.front());
+		Log(" %.*s", (int)w.letters.size(), &w.letters.front());
 	}
 	Log(" }");
 }
@@ -72,6 +99,7 @@ bool IsLetter(char c)
 
 std::vector<Word> Load(char const* filename)
 {
+	Timer timer;
 	int size = 0;
 	char* buffer = nullptr;
 
@@ -110,11 +138,11 @@ std::vector<Word> Load(char const* filename)
 		}
 
 		// Store if it's the length we require
-		if (ptr2 - ptr == word.size())
+		if (ptr2 - ptr == word.letters.size())
 		{
-			for (int i = 0; i < word.size(); ++i)
+			for (int i = 0; i < word.letters.size(); ++i)
 			{
-				word[i] = ptr[i];
+				word.letters[i] = ptr[i];
 			}
 			words.push_back(word);
 		}
@@ -122,38 +150,17 @@ std::vector<Word> Load(char const* filename)
 	}
 	free(buffer);
 
+	Log("Load [%s]: %zu (%lldms)\n", filename, words.size(), timer.Milliseconds());
 	return words;
-}
-
-bool IsAnagram(Word const& a, Word b)
-{
-	for (auto c : a)
-	{
-		bool found = false;
-		for (auto& d : b)
-		{
-			if (c == d)
-			{
-				d = 0;
-				found = true;
-				break;
-			}
-		}
-		if (!found)
-		{
-			return false;
-		}
-	}
-	return true;
 }
 
 bool HasDoubleLetter(Word const& word)
 {
-	for (int i = 0; i < word.size(); ++i)
+	for (int i = 0; i < word.letters.size(); ++i)
 	{
-		for (int j = i + 1; j < word.size(); ++j)
+		for (int j = i + 1; j < word.letters.size(); ++j)
 		{
-			if (word[i] == word[j])
+			if (word.letters[i] == word.letters[j])
 			{
 				return true;
 			}
@@ -164,14 +171,33 @@ bool HasDoubleLetter(Word const& word)
 
 void RemoveDoubleLetters(std::vector<Word>& words)
 {
+	Timer timer;
 	auto it = std::remove_if(words.begin(), words.end(), HasDoubleLetter);
 	words.erase(it, words.end());
 
-	Log("RemoveDoubleLetters: %zu\n", words.size());
+	Log("RemoveDoubleLetters: %zu (%lldus)\n", words.size(), timer.Microseconds());
+}
+
+void GenerateRepresentations(std::vector<Word>& words)
+{
+	Timer timer;
+
+	for (auto& word : words)
+	{
+		int rep = 0;
+		for (auto l : word.letters)
+		{
+			rep += 1 << (l - 'a');
+		}
+		word.rep = rep;
+	}
+
+	Log("GenerateRepresentations: (%lldus)\n", timer.Microseconds());
 }
 
 std::vector<Entry> FindAnagrams(std::vector<Word> in)
 {
+	Timer timer;
 	std::vector<Entry> out;
 	 
 	for (auto word : in)
@@ -179,7 +205,7 @@ std::vector<Entry> FindAnagrams(std::vector<Word> in)
 		bool found = false;
 		for (auto& en : out)
 		{
-			if (IsAnagram(word, en.base))
+			if (word.rep == en.rep)
 			{
 				found = true;
 				en.words.push_back(word);
@@ -190,48 +216,19 @@ std::vector<Entry> FindAnagrams(std::vector<Word> in)
 		if (!found)
 		{
 			Entry en;
-			en.base = word;
+			en.rep = word.rep;
 			en.words = { word };
 			out.push_back(en);
 		}
 	}
 
-	Log("FindAnagrams: %zu\n", out.size());
-
+	Log("FindAnagrams: %zu (%lldms)\n", out.size(), timer.Milliseconds());
 	return out;
 }
 
-void SortBases(std::vector<Entry>& entries)
+bool IsCommonLetter(int a, int b)
 {
-	for (auto& en : entries)
-	{
-		std::sort(en.base.begin(), en.base.end(), std::less<char>());
-	}
-}
-
-bool IsCommonLetter(Word const& a, Word const& b)
-{
-	// Assumes a and b are sorted
-
-	int i = 0;
-	int j = 0;
-	while (i < a.size() && j < b.size())
-	{
-		if (a[i] == b[j])
-		{
-			return true;
-		}
-
-		if (a[i] < b[j])
-		{
-			++i;
-		}
-		else
-		{
-			++j;
-		}
-	}
-	return false;
+	return (a & b) != 0;
 }
 
 std::vector<Solution> FindSolutions(std::vector<Entry>& in)
@@ -259,7 +256,7 @@ std::vector<Solution> FindSolutions(std::vector<Entry>& in)
 			{
 				auto e1 = &in[i1];
 
-				if (!IsCommonLetter(e0->base, e1->base))
+				if (!IsCommonLetter(e0->rep, e1->rep))
 				{
 					set.options.push_back(e1);
 					++count;
@@ -297,7 +294,7 @@ std::vector<Solution> FindSolutions(std::vector<Entry>& in)
 				{
 					auto* e2 = options[i2];
 
-					if (!IsCommonLetter(e1->base, e2->base))
+					if (!IsCommonLetter(e1->rep, e2->rep))
 					{
 						set.options.push_back(e2);
 						++count;
@@ -331,7 +328,7 @@ std::vector<Solution> FindSolutions(std::vector<Entry>& in)
 				{
 					auto* e3 = options[i2];
 
-					if (!IsCommonLetter(e2->base, e3->base))
+					if (!IsCommonLetter(e2->rep, e3->rep))
 					{
 						set.options.push_back(e3);
 						++count;
@@ -364,7 +361,7 @@ std::vector<Solution> FindSolutions(std::vector<Entry>& in)
 				{
 					auto* e4 = options[i2];
 
-					if (!IsCommonLetter(e3->base, e4->base))
+					if (!IsCommonLetter(e3->rep, e4->rep))
 					{
 						Solution s = { *quad.e0, *quad.e1, *quad.e2, *e3, *e4 };
 						Print(s);
@@ -391,29 +388,24 @@ int main()
 	Log("~~~ Welcome to WordFinder ~~~\n");
 
 	// Start timer
-	auto start = std::chrono::high_resolution_clock::now();
+	Timer timer;
 
 	// Load word list
 	//char const* filename = "words.txt";
 	char const* filename = "words_alpha.txt";
 	auto words = Load(filename);
-	Log("Load [%s]: %zu\n", filename, words.size());
 
 	// Filter words with repeated letters
 	RemoveDoubleLetters(words);
+	GenerateRepresentations(words);
 
 	// Filter (and store) anagrams
 	auto entries = FindAnagrams(words);
-
-	// Sort the base words to optimise the search
-	SortBases(entries);
 
 	// Run the search
 	auto solutions = FindSolutions(entries);
 
 	// Record how long the process took
-	auto end = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
-	Log("Took: %llds\n", duration);
+	Log("Took: %llds\n", timer.Seconds());
 	fclose(g_Log);
 }
